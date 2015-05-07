@@ -6,7 +6,7 @@ import qualified Data.ByteString as BS
 import Data.Word
 import GHC.Generics
 import Data.Binary
-
+import Data.Bits
 {-
 PDU Types
 A-Associate-RQ 0x01
@@ -214,7 +214,42 @@ buildAbortPDU s r = AbortPDU (PDUHeader (getPDUTypeVal A_ABORT) 0 4)
                              (fromIntegral $ fromEnum s)
 
 
+{-
+PDataTF contains a list of Presentation Data Value Items
+Each Presentation Data Value Item contains one Presentation Data Value
+Each Presentation Data Value contains a Command Message Fragment or a Data Message Fragment
+-}
+data PDataTF = PDataTF{
+    pdataHeader :: PDUHeader
+  , pdviList::[PresentationDataValueItem]
+  } deriving (Show,Generic)
+instance Binary PDataTF
 
+data PDVItemHeader = PDVIH {
+      pdvItemLength::Word32
+    , contextID::Word8
+    } deriving (Show,Generic)
+instance Binary PDVItemHeader
+
+data PresentationDataValueItem = PDVI{
+    pdvItemHeader::PDVItemHeader
+  , pdvValue::PresentationDataValue
+  } deriving (Show,Generic)
+instance Binary PresentationDataValueItem
+
+data PresentationDataValue = PDV{
+    msgCtrlHeader::Word8
+  , msgFragment::BS.ByteString
+  } deriving (Show,Generic)
+instance Binary PresentationDataValue
+
+{-Check to see if the PDV is a command fragment-}
+isPDVCommand::PresentationDataValue -> Bool
+isPDVCommand pdv = msgCtrlHeader pdv .&. 1 >  0
+
+{-Check to see if the PDV is the last fragment-}
+isPDVLastFragment :: PresentationDataValue -> Bool
+isPDVLastFragment pdv = msgCtrlHeader pdv .&. 2 > 0 
 
 data ItemHeader = ItemHeader { itemType::Word8, itemReserved::Word8, itemLength::Word16}
   deriving (Show,Generic)
@@ -228,7 +263,7 @@ data ApplicationContextItem = ApplicationContextItem {
 instance Binary ApplicationContextItem
                               
 data UserInformationItem = UserInformationItem {
-   uiiType         ::Int
+    uiiType         ::Int
   , uiiLength      ::Int
   , uiiSubItemList ::[UserInformationSubItem]
   } deriving (Show,Generic)
