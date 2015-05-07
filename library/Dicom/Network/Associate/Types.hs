@@ -6,7 +6,8 @@ import qualified Data.ByteString as BS
 import Data.Word
 import GHC.Generics
 import Data.Binary
-
+import Data.Bits
+import Control.Monad
 {-
 PDU Types
 A-Associate-RQ 0x01
@@ -107,9 +108,6 @@ buildAssociateRQPDU toAE fromAE=
                    fromAE
                    (BL.replicate 32 0)
                    [[]]
-
-
-
     
 data AssociateACPDU = AssociateACPDU {
     accPDUHeader        :: PDUHeader
@@ -214,7 +212,62 @@ buildAbortPDU s r = AbortPDU (PDUHeader (getPDUTypeVal A_ABORT) 0 4)
                              (fromIntegral $ fromEnum s)
 
 
+{-
+PDataTF contains a list of Presentation Data Value Items
+Each Presentation Data Value Item contains one Presentation Data Value
+Each Presentation Data Value contains a Command Message Fragment or a Data Message Fragment
+-}
+data PDataTF = PDataTF{
+    pdataHeader :: PDUHeader
+  , pdviList::[PresentationDataValueItem]
+  } deriving (Show,Generic)
+instance Binary PDataTF
 
+data PDVItemHeader = PDVIH {
+      pdvItemLength::Word32
+    } deriving (Show,Generic)
+instance Binary PDVItemHeader
+
+data PresentationDataValueItem = PDVI{
+      pdvItemHeader::PDVItemHeader
+    , pdvContextID::Word8
+    , msgCtrlHeader::Word8
+    , msgFragment::[Word8]
+
+    } deriving (Show,Generic)
+instance Binary PresentationDataValueItem  where
+  put p = do put (pdvItemHeader p)
+             put (pdvContextID p)
+             put (msgCtrlHeader p)
+             mapM_ put (msgFragment p)
+  get = do header <- get -- includes length from the context id to the end of the item 
+           contextID <- get 
+           ctrlHeader <- get
+           fragment <- replicateM (fromIntegral (pdvItemLength header) - 2) get  -- need to subtract size of contextId and ctrlHeader
+           return PDVI {pdvItemHeader = header ,pdvContextID = contextID, msgCtrlHeader = ctrlHeader, msgFragment= fragment}
+             
+{-Gets the total length of the Presentation Data Value Item.  This can be used to move the offset through the PDU buffer while parsin-}
+getPDVItemTotalLength::BS.ByteString -> Int
+getPDVItemTotalLength bs = fromIntegral $ 4 + pdvItemLength (decode (BL.fromChunks [BS.take 4 bs])::PDVItemHeader)
+
+{-Unpacks a Presentaiton Data Value Item from a ByteString buffer-}
+unpackPDVI::BS.ByteString -> PresentationDataValueItem
+unpackPDVI bs =   decode (BL.fromChunks [BS.take itemLen bs])::PresentationDataValueItem 
+                   where itemLen   = fromIntegral $ getPDVItemTotalLength bs
+                         
+{-unpacks a list of Presentation Data Values from a ByteString buffer-}
+unpackPDVIList ::BS.ByteString -> [PresentationDataValueItem]
+unpackPDVIList bs | BS.null bs  = []
+                  | otherwise   = let item = unpackPDVI bs
+                                  in item:unpackPDVIList (BS.drop  (fromIntegral  (pdvItemLength $ pdvItemHeader item)+4) bs)
+                        
+{-Check to see if the PDV is a command fragment-}
+isPDVCommand::PresentationDataValueItem -> Bool
+isPDVCommand pdv = msgCtrlHeader pdv .&. 1 >  0
+
+{-Check to see if the PDV is the last fragment-}
+isPDVLastFragment :: PresentationDataValueItem -> Bool
+isPDVLastFragment pdv = msgCtrlHeader pdv .&. 2 > 0 
 
 data ItemHeader = ItemHeader { itemType::Word8, itemReserved::Word8, itemLength::Word16}
   deriving (Show,Generic)
@@ -228,7 +281,7 @@ data ApplicationContextItem = ApplicationContextItem {
 instance Binary ApplicationContextItem
                               
 data UserInformationItem = UserInformationItem {
-   uiiType         ::Int
+    uiiType         ::Int
   , uiiLength      ::Int
   , uiiSubItemList ::[UserInformationSubItem]
   } deriving (Show,Generic)
