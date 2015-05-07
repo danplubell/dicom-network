@@ -7,6 +7,7 @@ import Data.Word
 import GHC.Generics
 import Data.Binary
 import Data.Bits
+
 {-
 PDU Types
 A-Associate-RQ 0x01
@@ -107,9 +108,6 @@ buildAssociateRQPDU toAE fromAE=
                    fromAE
                    (BL.replicate 32 0)
                    [[]]
-
-
-
     
 data AssociateACPDU = AssociateACPDU {
     accPDUHeader        :: PDUHeader
@@ -243,6 +241,27 @@ data PresentationDataValue = PDV{
   } deriving (Show,Generic)
 instance Binary PresentationDataValue
 
+getPDVItemLength'::BS.ByteString -> Either String Word32
+getPDVItemLength' bs = if BS.length bs /= 5 then Left "ByteString length does not match header length"
+                      else Right (pdvItemLength (decode (BL.fromChunks  [BS.take 5 bs])::PDVItemHeader))
+getPDVItemLength::BS.ByteString -> Int
+getPDVItemLength bs = fromIntegral $ 5 + pdvItemLength (decode (BL.fromChunks [BS.take 5 bs])::PDVItemHeader)
+
+getPDVItem::BS.ByteString -> PresentationDataValueItem
+getPDVItem bs =  PDVI{   pdvItemHeader = decode (BL.fromChunks [BS.take 5 bs])::PDVItemHeader
+                       , pdvValue = decode (BL.fromChunks [BS.drop 5 bs])::PresentationDataValue
+                     }
+
+unpackPDVI::BS.ByteString -> PresentationDataValueItem
+unpackPDVI bs =  parsePDVI 
+                   where itemLen   = fromIntegral $ getPDVItemLength bs
+                         parsePDVI = getPDVItem $ BS.take itemLen bs
+
+unpackPDVIList ::BS.ByteString -> [PresentationDataValueItem]
+unpackPDVIList bs | BS.null bs  = []
+                  | otherwise   = let item = unpackPDVI bs
+                                  in item:unpackPDVIList (BS.drop ( fromIntegral $ pdvItemLength$ pdvItemHeader item) bs)
+                        
 {-Check to see if the PDV is a command fragment-}
 isPDVCommand::PresentationDataValue -> Bool
 isPDVCommand pdv = msgCtrlHeader pdv .&. 1 >  0
