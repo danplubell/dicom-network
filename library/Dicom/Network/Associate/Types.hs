@@ -7,7 +7,7 @@ import Data.Word
 import GHC.Generics
 import Data.Binary
 import Data.Bits
-
+import Control.Monad
 {-
 PDU Types
 A-Associate-RQ 0x01
@@ -225,49 +225,62 @@ instance Binary PDataTF
 
 data PDVItemHeader = PDVIH {
       pdvItemLength::Word32
-    , contextID::Word8
     } deriving (Show,Generic)
 instance Binary PDVItemHeader
 
 data PresentationDataValueItem = PDVI{
-    pdvItemHeader::PDVItemHeader
-  , pdvValue::PresentationDataValue
-  } deriving (Show,Generic)
-instance Binary PresentationDataValueItem
+      pdvItemHeader::PDVItemHeader
+    , pdvContextID::Word8
+    , msgCtrlHeader::Word8
+    , msgFragment::[Word8]
 
+    } deriving (Show,Generic)
+instance Binary PresentationDataValueItem  where
+  put p = do put (pdvItemHeader p)
+             put (pdvContextID p)
+             put (msgCtrlHeader p)
+             mapM_ put (msgFragment p)
+  get = do header <- get -- includes length from the context id to the end of the item 
+           contextID <- get 
+           ctrlHeader <- get
+           fragment <- replicateM (fromIntegral (pdvItemLength header) - 2) get  -- need to subtract size of contextId and ctrlHeader
+           return PDVI {pdvItemHeader = header ,pdvContextID = contextID, msgCtrlHeader = ctrlHeader, msgFragment= fragment}
+             
+--instance Binary PresentationDataValueItem
+{-
 data PresentationDataValue = PDV{
     msgCtrlHeader::Word8
-  , msgFragment::BS.ByteString
+  , msgFragment::[Word8]
   } deriving (Show,Generic)
 instance Binary PresentationDataValue
-
+-}
 getPDVItemLength'::BS.ByteString -> Either String Word32
 getPDVItemLength' bs = if BS.length bs /= 5 then Left "ByteString length does not match header length"
                       else Right (pdvItemLength (decode (BL.fromChunks  [BS.take 5 bs])::PDVItemHeader))
-getPDVItemLength::BS.ByteString -> Int
-getPDVItemLength bs = fromIntegral $ 5 + pdvItemLength (decode (BL.fromChunks [BS.take 5 bs])::PDVItemHeader)
+
+getPDVItemTotalLength::BS.ByteString -> Int
+getPDVItemTotalLength bs = fromIntegral $ 4 + pdvItemLength (decode (BL.fromChunks [BS.take 4 bs])::PDVItemHeader)
 
 getPDVItem::BS.ByteString -> PresentationDataValueItem
-getPDVItem bs =  PDVI{   pdvItemHeader = decode (BL.fromChunks [BS.take 5 bs])::PDVItemHeader
-                       , pdvValue = decode (BL.fromChunks [BS.drop 5 bs])::PresentationDataValue
-                     }
+getPDVItem bs =  decode (BL.fromChunks [bs])::PresentationDataValueItem
+                     
 
 unpackPDVI::BS.ByteString -> PresentationDataValueItem
-unpackPDVI bs =  parsePDVI 
-                   where itemLen   = fromIntegral $ getPDVItemLength bs
-                         parsePDVI = getPDVItem $ BS.take itemLen bs
+unpackPDVI bs =  getPDVItem $ BS.take itemLen bs 
+                   where itemLen   = fromIntegral $ getPDVItemTotalLength bs
+                         
 
 unpackPDVIList ::BS.ByteString -> [PresentationDataValueItem]
 unpackPDVIList bs | BS.null bs  = []
                   | otherwise   = let item = unpackPDVI bs
-                                  in item:unpackPDVIList (BS.drop ( fromIntegral $ pdvItemLength$ pdvItemHeader item) bs)
+                                  in item:unpackPDVIList (BS.drop  (fromIntegral  (pdvItemLength $ pdvItemHeader item)+4) bs)
                         
 {-Check to see if the PDV is a command fragment-}
-isPDVCommand::PresentationDataValue -> Bool
+isPDVCommand::PresentationDataValueItem -> Bool
 isPDVCommand pdv = msgCtrlHeader pdv .&. 1 >  0
 
 {-Check to see if the PDV is the last fragment-}
-isPDVLastFragment :: PresentationDataValue -> Bool
+isPDVLastFragment :: PresentationDataValueItem -> Bool
 isPDVLastFragment pdv = msgCtrlHeader pdv .&. 2 > 0 
 
 data ItemHeader = ItemHeader { itemType::Word8, itemReserved::Word8, itemLength::Word16}
