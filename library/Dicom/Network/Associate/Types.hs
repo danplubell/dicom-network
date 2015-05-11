@@ -75,7 +75,7 @@ newAssociateRQPDU = AssociateRQPDU {
   , arqProtocolVersion = 0
   , calledAETitle      = ""
   , callingAETitle     = ""
-  , arqVariableItems      = [[]]                 
+  , arqVariableItems      = []                 
   , arqReserved2       = BL.replicate 32 0}
 
 data AssociateRQPDU = AssociateRQPDU {
@@ -85,7 +85,7 @@ data AssociateRQPDU = AssociateRQPDU {
   , calledAETitle      :: String
   , callingAETitle     :: String
   , arqReserved2       :: BL.ByteString -- fixed length of 32 reserved bytes
-  , arqVariableItems      :: [[Word8]] --includes Application Context Item, User Information Item, and Presentation Context.  These items can be in any order.  
+  , arqVariableItems      :: [ARQItem] --includes Application Context Item, User Information Item, and Presentation Context.  These items can be in any order.  
   } deriving (Show,Generic)
 
 
@@ -107,7 +107,7 @@ buildAssociateRQPDU toAE fromAE=
                    toAE
                    fromAE
                    (BL.replicate 32 0)
-                   [[]]
+                   []
     
 data AssociateACPDU = AssociateACPDU {
     accPDUHeader        :: PDUHeader
@@ -283,6 +283,50 @@ isPDVCommand pdv = msgCtrlHeader pdv .&. 1 >  0
 isPDVLastFragment :: PresentationDataValueItem -> Bool
 isPDVLastFragment pdv = msgCtrlHeader pdv .&. 2 > 0 
 
+
+data ARQItem = ApplicationContextItem
+               {
+                  acnType        ::Word8
+                , acnReserved    ::Word8
+                , acnLength      ::Word16
+                , acnContextName ::String
+               }
+             | UserInformationItem
+                 {
+                     uiiType        ::Word8
+                   , uiiReserved    ::Word8
+                   , uiiLength      ::Word16
+                   , uiiSubItemList ::[UserInformationSubItem]
+                 }
+             | PresentationContext
+                 {
+                     pcType              ::Word8
+                   , pcLength            ::Word16
+                   , pcIdentifier        ::Word8
+                   , pcReserved1         ::Word8
+                   , pcReserved2         ::Word8
+                   , pcReserved3         ::Word8
+                   , pcItemList          ::[PCItem]
+                 }
+             | UnknownARQItem        
+             deriving (Show,Generic)
+            
+instance Binary ARQItem
+
+data PCItem = AbstractSyntax{
+                 asItemType    ::Word8
+               , asReserved    ::Word8
+               , asItemLength  :: Word16
+               , asName        :: String}
+              | TransferSyntax{
+                   tsItemType ::Word8
+                 , tsReserved ::Word8
+                 , tsNames    ::[String]}
+              | UnknownPCItem
+              deriving (Show,Generic)
+instance Binary PCItem
+
+{-
 data ItemHeader = ItemHeader { itemType::Word8, itemReserved::Word8, itemLength::Word16}
   deriving (Show,Generic)
 instance Binary ItemHeader
@@ -301,6 +345,16 @@ data UserInformationItem = UserInformationItem {
   } deriving (Show,Generic)
 instance Binary UserInformationItem
 
+
+data PresentationContext = PresentationContext {
+    pcIdentifier        ::Char
+  , pcResultReason      ::Char
+  , pcAbstractSyntaxUID ::String
+  , transferSyntacUIDs  ::[String]
+  } deriving (Show,Generic)
+
+instance Binary PresentationContext
+-}
 data SCPSCURoleSelection = SCPRoleSelection {
     scuRole :: Bool
   , scpRole :: Bool
@@ -330,13 +384,4 @@ data UserInformationSubItem = ImplementationClassUID        { icUID             
                                                             , secondaryField       ::BL.ByteString
                                                             } deriving (Show,Generic)
 instance Binary UserInformationSubItem
-
-data PresentationContext = PresentationContext {
-    pcIdentifier        ::Char
-  , pcResultReason      ::Char
-  , pcAbstractSyntaxUID ::String
-  , transferSyntacUIDs  ::[String]
-  } deriving (Show,Generic)
-
-instance Binary PresentationContext
 
