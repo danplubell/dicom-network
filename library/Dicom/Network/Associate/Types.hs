@@ -246,16 +246,30 @@ instance Binary PresentationDataValueItem  where
            fragment <- replicateM (fromIntegral (pdvItemLength header) - 2) get  -- need to subtract size of contextId and ctrlHeader
            return PDVI {pdvItemHeader = header ,pdvContextID = contextID, msgCtrlHeader = ctrlHeader, msgFragment= fragment}
              
-{-Gets the total length of the Presentation Data Value Item.  This can be used to move the offset through the PDU buffer while parsin-}
+--instance Binary PresentationDataValueItem
+{-
+data PresentationDataValue = PDV{
+    msgCtrlHeader::Word8
+  , msgFragment::[Word8]
+  } deriving (Show,Generic)
+instance Binary PresentationDataValue
+-}
+getPDVItemLength'::BS.ByteString -> Either String Word32
+getPDVItemLength' bs = if BS.length bs /= 5 then Left "ByteString length does not match header length"
+                      else Right (pdvItemLength (decode (BL.fromChunks  [BS.take 5 bs])::PDVItemHeader))
+
 getPDVItemTotalLength::BS.ByteString -> Int
 getPDVItemTotalLength bs = fromIntegral $ 4 + pdvItemLength (decode (BL.fromChunks [BS.take 4 bs])::PDVItemHeader)
 
-{-Unpacks a Presentaiton Data Value Item from a ByteString buffer-}
+getPDVItem::BS.ByteString -> PresentationDataValueItem
+getPDVItem bs =  decode (BL.fromChunks [bs])::PresentationDataValueItem
+                     
+
 unpackPDVI::BS.ByteString -> PresentationDataValueItem
-unpackPDVI bs =   decode (BL.fromChunks [BS.take itemLen bs])::PresentationDataValueItem 
+unpackPDVI bs =  getPDVItem $ BS.take itemLen bs 
                    where itemLen   = fromIntegral $ getPDVItemTotalLength bs
                          
-{-unpacks a list of Presentation Data Values from a ByteString buffer-}
+
 unpackPDVIList ::BS.ByteString -> [PresentationDataValueItem]
 unpackPDVIList bs | BS.null bs  = []
                   | otherwise   = let item = unpackPDVI bs
