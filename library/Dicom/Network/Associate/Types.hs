@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE RecordWildCards #-}
 module Dicom.Network.Associate.Types where
 
 import qualified Data.ByteString.Lazy as BL
@@ -310,78 +311,115 @@ data ARQItem = ApplicationContextItem
                  }
              | UnknownARQItem        
              deriving (Show,Generic)
-            
-instance Binary ARQItem
 
+instance Binary ARQItem where
+  put i = case i of
+               ApplicationContextItem{..} ->
+                 do put acnType
+                    put acnReserved
+                    put acnLength 
+                    mapM_ put acnContextName
+               UserInformationItem {..} ->
+                 do put uiiType
+                    put uiiReserved
+                    put uiiLength
+                    mapM_ put uiiSubItemList
+               PresentationContext {..}->
+                 do put pcType
+                    put pcLength
+                    put pcIdentifier
+                    put pcReserved1
+                    put pcReserved2
+                    put pcReserved3
+                    mapM_ put pcItemList
+
+               
+  get = do itemType <- getWord8
+           case itemType of
+             0x10 -> do acReserved <- get
+                        aclength   <- get
+                        acName     <- replicateM (fromIntegral aclength) get
+                        return $ ApplicationContextItem itemType acReserved aclength acName                       
+             0x20 -> populatePresentationContext itemType
+             0x21 -> populatePresentationContext itemType
+             0x50 -> return UnknownARQItem
+             _    -> return UnknownARQItem
+        where populatePresentationContext it  =
+                do 
+                   pclength     <- get
+                   pcidentifier <- get
+                   pcreserved1  <- get
+                   pcreserved2  <- get
+                   pcreserved3  <- get
+                   pcitemlist   <- get
+                   return $ PresentationContext it pclength pcidentifier pcreserved1 pcreserved2 pcreserved3 pcitemlist
+                               
 data PCItem = AbstractSyntax{
                  asItemType    ::Word8
                , asReserved    ::Word8
-               , asItemLength  :: Word16
-               , asName        :: String}
+               , asItemLength  ::Word16
+               , asName        ::String}
               | TransferSyntax{
                    tsItemType ::Word8
                  , tsReserved ::Word8
-                 , tsNames    ::[String]}
+                 , tsLength   ::Word16
+                 , tsName    ::String}
               | UnknownPCItem
               deriving (Show,Generic)
-instance Binary PCItem
+                       
+instance Binary PCItem where
+  put i = case i of
+            AbstractSyntax {..} -> do put asItemType
+                                      put asReserved
+                                      put asItemLength
+                                      mapM_ put asName
+                               
+            TransferSyntax {..} -> do put tsItemType
+                                      put tsReserved
+                                      put tsLength
+                                      mapM_ put tsName
+  get = do
+    itemType <- get
+    case itemType of
+      0x40 -> do tsreserved   <- get
+                 tsitemlength <- get
+                 tsname       <- replicateM (fromIntegral tsitemlength) get
+                 return $ TransferSyntax itemType tsreserved tsitemlength tsname
+      0x30 -> do asreserved   <- get
+                 asitemlength <- get
+                 asname       <- replicateM (fromIntegral asitemlength) get
+                 return $ AbstractSyntax itemType asreserved asitemlength asname 
 
-{-
 data ItemHeader = ItemHeader { itemType::Word8, itemReserved::Word8, itemLength::Word16}
   deriving (Show,Generic)
 instance Binary ItemHeader
-
-data ApplicationContextItem = ApplicationContextItem {
-    acnType        ::Int
-  , acnLength      ::Int
-  , acnContextName ::String
-  } deriving (Show,Eq,Read,Generic)
-instance Binary ApplicationContextItem
-                              
-data UserInformationItem = UserInformationItem {
-    uiiType         ::Int
-  , uiiLength      ::Int
-  , uiiSubItemList ::[UserInformationSubItem]
-  } deriving (Show,Generic)
-instance Binary UserInformationItem
-
-
-data PresentationContext = PresentationContext {
-    pcIdentifier        ::Char
-  , pcResultReason      ::Char
-  , pcAbstractSyntaxUID ::String
-  , transferSyntacUIDs  ::[String]
-  } deriving (Show,Generic)
-
-instance Binary PresentationContext
--}
-data SCPSCURoleSelection = SCPRoleSelection {
-    scuRole :: Bool
-  , scpRole :: Bool
-  , abstractSyntaxUID::String
-  } deriving (Show,Generic)
-instance Binary SCPSCURoleSelection
-
-data UserInformationSubItem = ImplementationClassUID        { icUID                ::String}
-                            | SCUSCPRoleSelection           { roleSelection        ::SCPSCURoleSelection}
-                            | ImplementationVersionName     { ivn                  ::String}
-                            | MaximumLengthReceived         { maxLenR              ::Int}
-                            | SOPClassExtendedNegotiation   {
-                                                              sopClassUIDLength    ::Int
-                                                            , sopClassUID          ::String
-                                                            , info                 ::BL.ByteString
-                                                            }
-                            | UserIdentityNegotationAccept  {
-                                                              serverResponseLength ::Int
-                                                            , serverResponse       ::BL.ByteString
-                                                            }
-                            | UserIdentityNegotiationRequest{
-                                                              userIdentityType     ::Int
-                                                            , posRespRequired      ::Int
-                                                            , primaryFieldLen      ::Int
-                                                            , primaryField         ::BL.ByteString
-                                                            , secondaryFieldLen    ::Int
-                                                            , secondaryField       ::BL.ByteString
-                                                            } deriving (Show,Generic)
-instance Binary UserInformationSubItem
-
+data UserInformationSubItem = ImplementationClassUID        {   icItemHeader ::ItemHeader
+                                                              , icUID        ::String}
+                            | ImplementationVersionName     {   ivnItemHeader::ItemHeader
+                                                              , ivn          ::String}
+                            | MaximumLengthReceived         {   mlItemHeader ::ItemHeader
+                                                              , mlMaxLength  ::Word32}
+                                                            deriving (Show,Generic)
+instance Binary UserInformationSubItem where
+  put i = case i of
+            ImplementationClassUID{..}    -> do put icItemHeader
+                                                mapM_ put icUID
+            ImplementationVersionName{..} -> do put ivnItemHeader
+                                                mapM_ put ivn
+                                                
+            MaximumLengthReceived{..}     -> do put mlItemHeader
+                                                put mlMaxLength
+  get = do           
+          header <- get
+          case itemType header of
+            0x51 -> do
+                      mlmaxlength <- get
+                      return $ MaximumLengthReceived header mlmaxlength
+            0x52 -> do
+                      icUID <- replicateM (fromIntegral $ itemLength header) get
+                      return $ ImplementationClassUID header icUID
+            0x55 -> do
+                      ivn <- replicateM (fromIntegral $ itemLength header) get
+                      return $ ImplementationVersionName header ivn
+                      
+            
