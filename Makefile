@@ -14,7 +14,7 @@ clean:
 	if test -d .hpc; then rm -r .hpc; fi
 
 configure:
-	cabal configure --enable-benchmarks --enable-tests
+	cabal configure --enable-tests
 
 haddock:
 	cabal haddock --hyperlink-source
@@ -25,8 +25,8 @@ hpc:
 	# tmp/hpc_index.html
 
 install:
-	cabal sandbox init
-	cabal install --enable-benchmarks --enable-tests --jobs --only-dependencies --reorder-goals
+	cabal sandbox init --sandbox  /Users/cerdep/Documents/haskell-workspace/dicom/.cabal-sandbox
+	cabal install --enable-tests --jobs --only-dependencies --reorder-goals
 
 repl:
 	cabal repl lib:dicom-network

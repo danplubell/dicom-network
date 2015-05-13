@@ -332,7 +332,8 @@ instance Binary ARQItem where
                     put pcReserved2
                     put pcReserved3
                     mapM_ put pcItemList
-
+               UnknownARQItem -> putWord8 0
+               
                
   get = do itemType <- getWord8
            case itemType of
@@ -378,6 +379,7 @@ instance Binary PCItem where
                                       put tsReserved
                                       put tsLength
                                       mapM_ put tsName
+            UnknownPCItem       -> putWord8 0
   get = do
     itemType <- get
     case itemType of
@@ -389,7 +391,7 @@ instance Binary PCItem where
                  asitemlength <- get
                  asname       <- replicateM (fromIntegral asitemlength) get
                  return $ AbstractSyntax itemType asreserved asitemlength asname 
-
+      _    -> return UnknownPCItem
 data ItemHeader = ItemHeader { itemType::Word8, itemReserved::Word8, itemLength::Word16}
   deriving (Show,Generic)
 instance Binary ItemHeader
@@ -399,6 +401,7 @@ data UserInformationSubItem = ImplementationClassUID        {   icItemHeader ::I
                                                               , ivn          ::String}
                             | MaximumLengthReceived         {   mlItemHeader ::ItemHeader
                                                               , mlMaxLength  ::Word32}
+                            | UnknownSubItem
                                                             deriving (Show,Generic)
 instance Binary UserInformationSubItem where
   put i = case i of
@@ -409,6 +412,7 @@ instance Binary UserInformationSubItem where
                                                 
             MaximumLengthReceived{..}     -> do put mlItemHeader
                                                 put mlMaxLength
+            UnknownSubItem                -> putWord8 0
   get = do           
           header <- get
           case itemType header of
@@ -421,5 +425,5 @@ instance Binary UserInformationSubItem where
             0x55 -> do
                       ivn <- replicateM (fromIntegral $ itemLength header) get
                       return $ ImplementationVersionName header ivn
-                      
+            _    -> return UnknownSubItem          
             

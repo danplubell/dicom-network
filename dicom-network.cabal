@@ -76,6 +76,29 @@ executable dicom-network
     main-is:
         Main.hs
 
+test-suite tests
+    build-depends:
+           base
+         , HUnit
+         , QuickCheck
+         , hspec == 2.*
+    default-language:
+        Haskell2010
+    ghc-options:
+        -fhpc
+        -Wall
+        -Werror
+    hs-source-dirs:
+        library
+        test-suite
+    main-is:
+        Spec.hs
+    other-modules:
+        Dicom.Network.Associate.Types
+        AssociateSpec
+    type:
+        exitcode-stdio-1.0
+
 test-suite style
     build-depends:
         base
