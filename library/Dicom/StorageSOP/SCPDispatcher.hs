@@ -2,18 +2,20 @@ module Dicom.StorageSOP.SCPDispatcher where
 
 import Network.Socket
 import qualified Network.BSD as BSD
-import qualified Network.Socket.ByteString as NSB
+import qualified Network.Socket.ByteString.Lazy as NSB
 import Control.Exception
 import Control.Concurrent
 import Control.Monad
 import Control.Applicative
-import qualified Data.ByteString as BS
+--import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as BL
 import Dicom.Network.Associate.Types
+import Data.Int
 
 maxConnToListenTo::Int
 maxConnToListenTo = 5
 
-maxReceiveBufferSize::Int
+maxReceiveBufferSize::Int64
 maxReceiveBufferSize = 16384
 
 defaultReceiveBufferSize::Int
@@ -81,9 +83,9 @@ runStorageClassSCP skt = do
 Attempts to get the PDU type from a given bytestring.
 The PDU type is the first byte int the bytestring
 -}
-getPDUType::BS.ByteString -> PDUType  
-getPDUType  bs = if BS.null bs then UNKNOWN_PDU
-                   else toEnum (fromIntegral $ head $ BS.unpack bs)::PDUType
+getPDUType::BL.ByteString -> PDUType  
+getPDUType  bs = if BL.null bs then UNKNOWN_PDU
+                   else toEnum (fromIntegral $ head $ BL.unpack bs)::PDUType
 
 
 processAssociateRQ:: AssociateRQPDU -> Socket-> IO ()
