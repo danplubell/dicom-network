@@ -3,7 +3,7 @@
 module Dicom.Network.Associate.Types where
 
 import qualified Data.ByteString.Lazy as BL
-import qualified Data.ByteString as BS
+--import qualified Data.ByteString as BS
 import Data.Word
 import GHC.Generics
 import Data.Binary
@@ -27,12 +27,12 @@ Transfer Syntax sub-item        0x40
 User Information Item           0x50
 Presentation Context Item Field 0x21
 -}
-
+{-
 class (Binary a) => PDU a where
   packPDU::a -> BS.ByteString
   unpackPDU::BS.ByteString -> a  
   unpackPDU bs  = decode $ BL.fromChunks [bs]
-  
+-}  
 getPDUTypeVal::PDUType -> Word8
 getPDUTypeVal  p = fromIntegral $ fromEnum p
 
@@ -91,10 +91,11 @@ data AssociateRQPDU = AssociateRQPDU {
 
 
 instance Binary AssociateRQPDU          
+{-
 instance PDU AssociateRQPDU where
   packPDU pdu = BS.concat $ BL.toChunks $ encode $ pdu { arqPDUHeader = (arqPDUHeader pdu)
                                {pduLength = calPDULength pdu}}
- 
+-} 
 type CalledAETitle = String
 type CallingAETitle = String
 type ImplementationClassUID = String
@@ -118,11 +119,11 @@ data AssociateACPDU = AssociateACPDU {
   } deriving (Show,Generic)
 
 instance Binary AssociateACPDU
-   
+{-   
 instance PDU AssociateACPDU where
   packPDU pdu = BS.concat . BL.toChunks $ encode $ pdu { accPDUHeader = (accPDUHeader pdu)
                               {pduLength = calPDULength pdu}}
-
+-}
 buildAssociateACPDU::AssociateACPDU
 buildAssociateACPDU = AssociateACPDU (PDUHeader (getPDUTypeVal A_ASSOCIATE_AC) 0 0)
                                      0
@@ -136,9 +137,11 @@ data AssociateRelRQPDU = AssociateRelRQPDU {
              
 instance Binary AssociateRelRQPDU
 
+{-
 instance PDU AssociateRelRQPDU where
   packPDU pdu = BS.concat . BL.toChunks $ encode $ pdu {arrqPDUHeader = (arrqPDUHeader pdu)
                               {pduLength = calPDULength pdu}}
+-}
 
 buildAssociateRelRQ::AssociateRelRQPDU
 buildAssociateRelRQ = AssociateRelRQPDU (PDUHeader (getPDUTypeVal A_RELEASE_RQ) 0 0) 0
@@ -150,9 +153,11 @@ data AssociateRelRPPDU = AssociateRelRPPDU {
              
 instance Binary AssociateRelRPPDU
 
+{-
 instance PDU AssociateRelRPPDU where
   packPDU pdu = BS.concat . BL.toChunks $ encode $ pdu {arrpPDUHeader = (arrpPDUHeader pdu)
                               {pduLength = calPDULength pdu}}
+-}
 
 buildAssociateRelRP::AssociateRelRPPDU
 buildAssociateRelRP = AssociateRelRPPDU (PDUHeader (getPDUTypeVal A_RELEASE_RP) 0 0) 0
@@ -201,11 +206,12 @@ data AbortPDU = AbortPDU {
   } deriving (Show,Generic)
 
 instance Binary AbortPDU
+{-
 instance PDU AbortPDU where
   packPDU pdu = BS.concat . BL.toChunks $ encode $ pdu {abortHeader = (abortHeader pdu)
                               {pduLength = calPDULength pdu}}
  
-
+-}
 buildAbortPDU::AbortSource -> AbortReason -> AbortPDU
 buildAbortPDU s r = AbortPDU (PDUHeader (getPDUTypeVal A_ABORT) 0 4)
                              0
@@ -255,26 +261,26 @@ data PresentationDataValue = PDV{
   } deriving (Show,Generic)
 instance Binary PresentationDataValue
 -}
-getPDVItemLength'::BS.ByteString -> Either String Word32
-getPDVItemLength' bs = if BS.length bs /= 5 then Left "ByteString length does not match header length"
-                      else Right (pdvItemLength (decode (BL.fromChunks  [BS.take 5 bs])::PDVItemHeader))
+getPDVItemLength'::BL.ByteString -> Either String Word32
+getPDVItemLength' bs = if BL.length bs /= 5 then Left "ByteString length does not match header length"
+                      else Right (pdvItemLength (decode (BL.take 5 bs)::PDVItemHeader))
 
-getPDVItemTotalLength::BS.ByteString -> Int
-getPDVItemTotalLength bs = fromIntegral $ 4 + pdvItemLength (decode (BL.fromChunks [BS.take 4 bs])::PDVItemHeader)
+getPDVItemTotalLength::BL.ByteString -> Int
+getPDVItemTotalLength bs = fromIntegral $ 4 + pdvItemLength (decode (BL.take 4 bs)::PDVItemHeader)
 
-getPDVItem::BS.ByteString -> PresentationDataValueItem
-getPDVItem bs =  decode (BL.fromChunks [bs])::PresentationDataValueItem
+getPDVItem::BL.ByteString -> PresentationDataValueItem
+getPDVItem bs =  decode bs::PresentationDataValueItem
                      
 
-unpackPDVI::BS.ByteString -> PresentationDataValueItem
-unpackPDVI bs =  getPDVItem $ BS.take itemLen bs 
+unpackPDVI::BL.ByteString -> PresentationDataValueItem
+unpackPDVI bs =  getPDVItem $ BL.take itemLen bs 
                    where itemLen   = fromIntegral $ getPDVItemTotalLength bs
                          
 
-unpackPDVIList ::BS.ByteString -> [PresentationDataValueItem]
-unpackPDVIList bs | BS.null bs  = []
+unpackPDVIList ::BL.ByteString -> [PresentationDataValueItem]
+unpackPDVIList bs | BL.null bs  = []
                   | otherwise   = let item = unpackPDVI bs
-                                  in item:unpackPDVIList (BS.drop  (fromIntegral  (pdvItemLength $ pdvItemHeader item)+4) bs)
+                                  in item:unpackPDVIList (BL.drop  (fromIntegral  (pdvItemLength $ pdvItemHeader item)+4) bs)
                         
 {-Check to see if the PDV is a command fragment-}
 isPDVCommand::PresentationDataValueItem -> Bool
