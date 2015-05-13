@@ -27,12 +27,12 @@ Transfer Syntax sub-item        0x40
 User Information Item           0x50
 Presentation Context Item Field 0x21
 -}
-{-
+
 class (Binary a) => PDU a where
-  packPDU::a -> BS.ByteString
-  unpackPDU::BS.ByteString -> a  
-  unpackPDU bs  = decode $ BL.fromChunks [bs]
--}  
+  packPDU::a -> BL.ByteString
+  unpackPDU::BL.ByteString -> a  
+  unpackPDU   = decode 
+  
 getPDUTypeVal::PDUType -> Word8
 getPDUTypeVal  p = fromIntegral $ fromEnum p
 
@@ -62,7 +62,7 @@ instance Enum PDUType where
   fromEnum A_ABORT        = 7
   
   
-data PDUHeader =PDUHeader{ pduType::Word8,pduHeaderReserved::Word8, pduLength::Word32} deriving (Show,Generic)
+data PDUHeader =PDUHeader{ pduType::Word8, pduHeaderReserved::Word8, pduLength::Word32} deriving (Show,Generic)
 
 instance Binary PDUHeader
 
@@ -76,7 +76,7 @@ newAssociateRQPDU = AssociateRQPDU {
   , arqProtocolVersion = 0
   , calledAETitle      = ""
   , callingAETitle     = ""
-  , arqVariableItems      = []                 
+  , arqVariableItems   = []                 
   , arqReserved2       = BL.replicate 32 0}
 
 data AssociateRQPDU = AssociateRQPDU {
@@ -86,16 +86,33 @@ data AssociateRQPDU = AssociateRQPDU {
   , calledAETitle      :: String
   , callingAETitle     :: String
   , arqReserved2       :: BL.ByteString -- fixed length of 32 reserved bytes
-  , arqVariableItems      :: [ARQItem] --includes Application Context Item, User Information Item, and Presentation Context.  These items can be in any order.  
+  , arqVariableItems   :: [ARQItem] --includes Application Context Item, User Information Item, and Presentation Context.  These items can be in any order.  
   } deriving (Show,Generic)
 
 
-instance Binary AssociateRQPDU          
-{-
+instance Binary AssociateRQPDU where
+  put a = do put (arqPDUHeader a)
+             put (arqProtocolVersion a)
+             put (arqReserved a)
+             mapM_ put (take 16 $ calledAETitle a)
+             mapM_ put (take 16 $ callingAETitle a)
+             put (arqReserved2 a)
+             mapM_ put (arqVariableItems a)
+  get = do arqHeader      <- get
+           arqprotocolv   <- get
+           arqreserved    <- get
+           calledaetitle  <- replicateM 16 get
+           callingaetitle <- replicateM 16 get
+           arqreserved2   <- get
+           return $ AssociateRQPDU arqHeader arqprotocolv arqreserved calledaetitle callingaetitle arqreserved2 []
+
+
+
 instance PDU AssociateRQPDU where
-  packPDU pdu = BS.concat $ BL.toChunks $ encode $ pdu { arqPDUHeader = (arqPDUHeader pdu)
+  packPDU pdu = encode $ pdu { arqPDUHeader = (arqPDUHeader pdu)
                                {pduLength = calPDULength pdu}}
--} 
+ 
+
 type CalledAETitle = String
 type CallingAETitle = String
 type ImplementationClassUID = String
@@ -119,11 +136,11 @@ data AssociateACPDU = AssociateACPDU {
   } deriving (Show,Generic)
 
 instance Binary AssociateACPDU
-{-   
+
+   
 instance PDU AssociateACPDU where
-  packPDU pdu = BS.concat . BL.toChunks $ encode $ pdu { accPDUHeader = (accPDUHeader pdu)
+  packPDU pdu = encode $ pdu { accPDUHeader = (accPDUHeader pdu)
                               {pduLength = calPDULength pdu}}
--}
 buildAssociateACPDU::AssociateACPDU
 buildAssociateACPDU = AssociateACPDU (PDUHeader (getPDUTypeVal A_ASSOCIATE_AC) 0 0)
                                      0
@@ -137,11 +154,11 @@ data AssociateRelRQPDU = AssociateRelRQPDU {
              
 instance Binary AssociateRelRQPDU
 
-{-
+
 instance PDU AssociateRelRQPDU where
-  packPDU pdu = BS.concat . BL.toChunks $ encode $ pdu {arrqPDUHeader = (arrqPDUHeader pdu)
+  packPDU pdu = encode $ pdu {arrqPDUHeader = (arrqPDUHeader pdu)
                               {pduLength = calPDULength pdu}}
--}
+
 
 buildAssociateRelRQ::AssociateRelRQPDU
 buildAssociateRelRQ = AssociateRelRQPDU (PDUHeader (getPDUTypeVal A_RELEASE_RQ) 0 0) 0
@@ -153,11 +170,11 @@ data AssociateRelRPPDU = AssociateRelRPPDU {
              
 instance Binary AssociateRelRPPDU
 
-{-
+
 instance PDU AssociateRelRPPDU where
-  packPDU pdu = BS.concat . BL.toChunks $ encode $ pdu {arrpPDUHeader = (arrpPDUHeader pdu)
+  packPDU pdu = encode $ pdu {arrpPDUHeader = (arrpPDUHeader pdu)
                               {pduLength = calPDULength pdu}}
--}
+
 
 buildAssociateRelRP::AssociateRelRPPDU
 buildAssociateRelRP = AssociateRelRPPDU (PDUHeader (getPDUTypeVal A_RELEASE_RP) 0 0) 0
@@ -206,12 +223,12 @@ data AbortPDU = AbortPDU {
   } deriving (Show,Generic)
 
 instance Binary AbortPDU
-{-
+
 instance PDU AbortPDU where
-  packPDU pdu = BS.concat . BL.toChunks $ encode $ pdu {abortHeader = (abortHeader pdu)
+  packPDU pdu = encode $ pdu {abortHeader = (abortHeader pdu)
                               {pduLength = calPDULength pdu}}
  
--}
+
 buildAbortPDU::AbortSource -> AbortReason -> AbortPDU
 buildAbortPDU s r = AbortPDU (PDUHeader (getPDUTypeVal A_ABORT) 0 4)
                              0
