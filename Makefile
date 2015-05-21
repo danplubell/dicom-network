@@ -35,5 +35,6 @@ run:
 	cabal run --jobs dicom-network
 
 test:
+	if test -d tests.tix; then rm -r tests.tix; fi
 	cabal test --jobs
 	cabal check

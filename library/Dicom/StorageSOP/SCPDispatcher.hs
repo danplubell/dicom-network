@@ -7,7 +7,6 @@ import Control.Exception
 import Control.Concurrent
 import Control.Monad
 import Control.Applicative
---import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
 import Dicom.Network.Associate.Types
 import Data.Int
@@ -79,13 +78,6 @@ runStorageClassSCP skt = do
   runStorageClassSCP skt
   return ()     
 
-{-
-Attempts to get the PDU type from a given bytestring.
-The PDU type is the first byte int the bytestring
--}
-getPDUType::BL.ByteString -> PDUType  
-getPDUType  bs = if BL.null bs then UNKNOWN_PDU
-                   else toEnum (fromIntegral $ head $ BL.unpack bs)::PDUType
 
 
 processAssociateRQ:: AssociateRQPDU -> Socket-> IO ()

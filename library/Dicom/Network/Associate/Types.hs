@@ -9,6 +9,8 @@ import GHC.Generics
 import Data.Binary
 import Data.Bits
 import Control.Monad
+import Data.Int
+
 {-
 PDU Types
 A-Associate-RQ 0x01
@@ -32,42 +34,51 @@ class (Binary a) => PDU a where
   packPDU::a -> BL.ByteString
   unpackPDU::BL.ByteString -> a  
   unpackPDU   = decode 
-  
-getPDUTypeVal::PDUType -> Word8
-getPDUTypeVal  p = fromIntegral $ fromEnum p
+
+class PDUType a  where
+  toPDUType   :: Word8 -> a
+  fromPDUType :: a -> Word8  
+
+getPDUTypeVal::PDUTypes -> Word8
+getPDUTypeVal   = fromPDUType 
+
+{-
+Attempts to get the PDU type from a given bytestring.
+The PDU type is the first byte int the bytestring
+-}
+getPDUType::BL.ByteString -> PDUTypes  
+getPDUType  bs = if BL.null bs then UNKNOWN_PDU
+                   else toPDUType (head $ BL.unpack bs)
 
 calPDULength :: (Binary a, Num b) => a -> b
 calPDULength pdu = fromIntegral $ BL.length (encode pdu)-6 
 
-data PDUType = A_ASSOCIATE_RQ|A_ASSOCIATE_AC|A_ASSOCIATE_RJ|P_DATA_TF|A_RELEASE_RQ|A_RELEASE_RP|A_ABORT|UNKNOWN_PDU deriving (Show,Eq,Ord)
+data PDUTypes = A_ASSOCIATE_RQ|A_ASSOCIATE_AC|A_ASSOCIATE_RJ|P_DATA_TF|A_RELEASE_RQ|A_RELEASE_RP|A_ABORT|UNKNOWN_PDU deriving (Show,Eq,Ord)
 
-instance Enum PDUType where
-  toEnum 1 = A_ASSOCIATE_RQ
-  toEnum 2 = A_ASSOCIATE_AC
-  toEnum 3 = A_ASSOCIATE_RJ
-  toEnum 4 = P_DATA_TF
-  toEnum 5 = A_RELEASE_RQ
-  toEnum 6 = A_RELEASE_RP
-  toEnum 7 = A_ABORT
-  toEnum 0 = UNKNOWN_PDU
-  toEnum _ = UNKNOWN_PDU
+instance PDUType PDUTypes where
+  toPDUType 1 = A_ASSOCIATE_RQ
+  toPDUType 2 = A_ASSOCIATE_AC
+  toPDUType 3 = A_ASSOCIATE_RJ
+  toPDUType 4 = P_DATA_TF
+  toPDUType 5 = A_RELEASE_RQ
+  toPDUType 6 = A_RELEASE_RP
+  toPDUType 7 = A_ABORT
+  toPDUType 0 = UNKNOWN_PDU
+  toPDUType _ = UNKNOWN_PDU
   
-  fromEnum UNKNOWN_PDU    = 0
-  fromEnum A_ASSOCIATE_RQ = 1
-  fromEnum A_ASSOCIATE_AC = 2
-  fromEnum A_ASSOCIATE_RJ = 3
-  fromEnum P_DATA_TF      = 4
-  fromEnum A_RELEASE_RQ   = 5
-  fromEnum A_RELEASE_RP   = 6
-  fromEnum A_ABORT        = 7
+  fromPDUType UNKNOWN_PDU    = 0
+  fromPDUType A_ASSOCIATE_RQ = 1
+  fromPDUType A_ASSOCIATE_AC = 2
+  fromPDUType A_ASSOCIATE_RJ = 3
+  fromPDUType P_DATA_TF      = 4
+  fromPDUType A_RELEASE_RQ   = 5
+  fromPDUType A_RELEASE_RP   = 6
+  fromPDUType A_ABORT        = 7
   
   
-data PDUHeader =PDUHeader{ pduType::Word8, pduHeaderReserved::Word8, pduLength::Word32} deriving (Show,Generic)
+data PDUHeader =PDUHeader{ pduType::Word8, pduHeaderReserved::Word8, pduLength::Word32} deriving (Show,Generic,Eq)
 
 instance Binary PDUHeader
-
-emptyHeader::PDUHeader
-emptyHeader= PDUHeader 0 0 0
 
 newAssociateRQPDU::AssociateRQPDU
 newAssociateRQPDU = AssociateRQPDU {
@@ -87,7 +98,7 @@ data AssociateRQPDU = AssociateRQPDU {
   , callingAETitle     :: String
   , arqReserved2       :: BL.ByteString -- fixed length of 32 reserved bytes
   , arqVariableItems   :: [ARQItem] --includes Application Context Item, User Information Item, and Presentation Context.  These items can be in any order.  
-  } deriving (Show,Generic)
+  } deriving (Show,Generic,Eq)
 
 
 instance Binary AssociateRQPDU where
@@ -307,49 +318,49 @@ isPDVCommand pdv = msgCtrlHeader pdv .&. 1 >  0
 isPDVLastFragment :: PresentationDataValueItem -> Bool
 isPDVLastFragment pdv = msgCtrlHeader pdv .&. 2 > 0 
 
+data ARQItemHeader = ARQItemHeader
+                     {
+                        arqItemType       ::Word8
+                     ,  arqItemReserved   ::Word8
+                     ,  arqItemLength     ::Word16
+                     } deriving (Show, Eq, Generic)
+instance Binary ARQItemHeader
+
+class ARQItemType a where
+  getHeader::a -> Int64
 
 data ARQItem = ApplicationContextItem
                {
-                  acnType        ::Word8
-                , acnReserved    ::Word8
-                , acnLength      ::Word16
-                , acnContextName ::String
+                 acnHeader      ::ARQItemHeader
+               , acnContextName ::String
                }
              | UserInformationItem
-                 {
-                     uiiType        ::Word8
-                   , uiiReserved    ::Word8
-                   , uiiLength      ::Word16
-                   , uiiSubItemList ::[UserInformationSubItem]
-                 }
+               {
+                 uiiHeader      ::ARQItemHeader
+               , uiiSubItemList ::[Word8]
+               }
              | PresentationContext
-                 {
-                     pcType              ::Word8
-                   , pcLength            ::Word16
-                   , pcIdentifier        ::Word8
-                   , pcReserved1         ::Word8
-                   , pcReserved2         ::Word8
-                   , pcReserved3         ::Word8
-                   , pcItemList          ::[PCItem]
-                 }
+               {
+                 pcHeader            ::ARQItemHeader
+               , pcIdentifier        ::Word8
+               , pcReserved1         ::Word8
+               , pcReserved2         ::Word8
+               , pcReserved3         ::Word8
+               , pcItemList          ::[Word8]
+               }
              | UnknownARQItem        
-             deriving (Show,Generic)
+             deriving (Show,Generic,Eq)
 
 instance Binary ARQItem where
   put i = case i of
                ApplicationContextItem{..} ->
-                 do put acnType
-                    put acnReserved
-                    put acnLength 
+                 do put acnHeader
                     mapM_ put acnContextName
                UserInformationItem {..} ->
-                 do put uiiType
-                    put uiiReserved
-                    put uiiLength
+                 do put uiiHeader
                     mapM_ put uiiSubItemList
                PresentationContext {..}->
-                 do put pcType
-                    put pcLength
+                 do put pcHeader
                     put pcIdentifier
                     put pcReserved1
                     put pcReserved2
@@ -358,26 +369,38 @@ instance Binary ARQItem where
                UnknownARQItem -> putWord8 0
                
                
-  get = do itemType <- getWord8
-           case itemType of
-             0x10 -> do acReserved <- get
-                        aclength   <- get
-                        acName     <- replicateM (fromIntegral aclength) get
-                        return $ ApplicationContextItem itemType acReserved aclength acName                       
-             0x20 -> populatePresentationContext itemType
-             0x21 -> populatePresentationContext itemType
-             0x50 -> return UnknownARQItem
+  get = do arqItemHeader <- get
+           case arqItemType arqItemHeader of
+             0x10 -> do 
+                        acName   <- replicateM (fromIntegral (arqItemLength arqItemHeader)) get
+                        return $ ApplicationContextItem arqItemHeader acName                       
+             0x20 -> populatePresentationContext arqItemHeader
+             0x21 -> populatePresentationContext arqItemHeader
+             0x50 -> do 
+                        usrItemList <- replicateM (fromIntegral (arqItemLength arqItemHeader)) get
+                        return $ UserInformationItem arqItemHeader usrItemList
              _    -> return UnknownARQItem
-        where populatePresentationContext it  =
+        where populatePresentationContext header  =
                 do 
-                   pclength     <- get
                    pcidentifier <- get
                    pcreserved1  <- get
                    pcreserved2  <- get
                    pcreserved3  <- get
-                   pcitemlist   <- get
-                   return $ PresentationContext it pclength pcidentifier pcreserved1 pcreserved2 pcreserved3 pcitemlist
-                               
+                   pcitemlist   <- replicateM (fromIntegral (arqItemLength header)-4) get
+                   return $ PresentationContext header pcidentifier pcreserved1 pcreserved2 pcreserved3 pcitemlist
+
+
+unpackARQItemList::BL.ByteString -> [ARQItem]
+unpackARQItemList bl
+  | BL.null bl  =  []
+  | otherwise   =  let item = decode bl
+                   in item:unpackARQItemList (BL.drop (arqPackedItemLength item) bl)
+{-
+Calculate the total length of the item
+-}
+arqPackedItemLength::ARQItem -> Int64
+arqPackedItemLength item = 0 
+
 data PCItem = AbstractSyntax{
                  asItemType    ::Word8
                , asReserved    ::Word8
