@@ -327,7 +327,7 @@ data ARQItemHeader = ARQItemHeader
 instance Binary ARQItemHeader
 
 class ARQItemType a where
-  getHeader::a -> Int64
+  getARQHeader::a -> ARQItemHeader
 
 data ARQItem = ApplicationContextItem
                {
@@ -339,7 +339,7 @@ data ARQItem = ApplicationContextItem
                  uiiHeader      ::ARQItemHeader
                , uiiSubItemList ::[Word8]
                }
-             | PresentationContext
+             | PresentationContextItem
                {
                  pcHeader            ::ARQItemHeader
                , pcIdentifier        ::Word8
@@ -351,6 +351,12 @@ data ARQItem = ApplicationContextItem
              | UnknownARQItem        
              deriving (Show,Generic,Eq)
 
+instance ARQItemType ARQItem where
+  getARQHeader ApplicationContextItem{..} = acnHeader 
+  getARQHeader UserInformationItem{..}    = uiiHeader
+  getARQHeader PresentationContextItem{..}    = pcHeader
+  getARQHeader UnknownARQItem             = ARQItemHeader 0 0 0
+  
 instance Binary ARQItem where
   put i = case i of
                ApplicationContextItem{..} ->
@@ -359,7 +365,7 @@ instance Binary ARQItem where
                UserInformationItem {..} ->
                  do put uiiHeader
                     mapM_ put uiiSubItemList
-               PresentationContext {..}->
+               PresentationContextItem {..}->
                  do put pcHeader
                     put pcIdentifier
                     put pcReserved1
@@ -370,8 +376,9 @@ instance Binary ARQItem where
                
                
   get = do arqItemHeader <- get
+--           return $ ApplicationContextItem (ARQItemHeader 0x10 0 20) "name"
            case arqItemType arqItemHeader of
-             0x10 -> do 
+             0x10 -> do  
                         acName   <- replicateM (fromIntegral (arqItemLength arqItemHeader)) get
                         return $ ApplicationContextItem arqItemHeader acName                       
              0x20 -> populatePresentationContext arqItemHeader
@@ -387,7 +394,7 @@ instance Binary ARQItem where
                    pcreserved2  <- get
                    pcreserved3  <- get
                    pcitemlist   <- replicateM (fromIntegral (arqItemLength header)-4) get
-                   return $ PresentationContext header pcidentifier pcreserved1 pcreserved2 pcreserved3 pcitemlist
+                   return $ PresentationContextItem header pcidentifier pcreserved1 pcreserved2 pcreserved3 pcitemlist
 
 
 unpackARQItemList::BL.ByteString -> [ARQItem]
@@ -397,9 +404,11 @@ unpackARQItemList bl
                    in item:unpackARQItemList (BL.drop (arqPackedItemLength item) bl)
 {-
 Calculate the total length of the item
+Length in the header is the length of the payload
+Need to add the size of the ARQ header
 -}
 arqPackedItemLength::ARQItem -> Int64
-arqPackedItemLength item = 0 
+arqPackedItemLength item = fromIntegral $ arqItemLength (getARQHeader item) + 4 
 
 data PCItem = AbstractSyntax{
                  asItemType    ::Word8
