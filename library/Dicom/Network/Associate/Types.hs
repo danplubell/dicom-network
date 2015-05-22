@@ -35,12 +35,15 @@ class (Binary a) => PDU a where
   unpackPDU::BL.ByteString -> a  
   unpackPDU   = decode 
 
-class PDUType a  where
-  toPDUType   :: Word8 -> a
-  fromPDUType :: a -> Word8  
+{-
+Defines a class of structures that are used to exchange information
+-}
+class StructType a  where
+  toStructType   :: Word8 -> a
+  fromStructType :: a -> Word8  
 
 getPDUTypeVal::PDUTypes -> Word8
-getPDUTypeVal   = fromPDUType 
+getPDUTypeVal   = fromStructType 
 
 {-
 Attempts to get the PDU type from a given bytestring.
@@ -48,41 +51,46 @@ The PDU type is the first byte int the bytestring
 -}
 getPDUType::BL.ByteString -> PDUTypes  
 getPDUType  bs = if BL.null bs then UNKNOWN_PDU
-                   else toPDUType (head $ BL.unpack bs)
+                   else toStructType (head $ BL.unpack bs)
 
 calPDULength :: (Binary a, Num b) => a -> b
 calPDULength pdu = fromIntegral $ BL.length (encode pdu)-6 
 
 data PDUTypes = A_ASSOCIATE_RQ|A_ASSOCIATE_AC|A_ASSOCIATE_RJ|P_DATA_TF|A_RELEASE_RQ|A_RELEASE_RP|A_ABORT|UNKNOWN_PDU deriving (Show,Eq,Ord)
+instance Binary PDUTypes where
+  put a = put (fromStructType a)
+  get = do t <- get
+           return $ toStructType t
 
-instance PDUType PDUTypes where
-  toPDUType 1 = A_ASSOCIATE_RQ
-  toPDUType 2 = A_ASSOCIATE_AC
-  toPDUType 3 = A_ASSOCIATE_RJ
-  toPDUType 4 = P_DATA_TF
-  toPDUType 5 = A_RELEASE_RQ
-  toPDUType 6 = A_RELEASE_RP
-  toPDUType 7 = A_ABORT
-  toPDUType 0 = UNKNOWN_PDU
-  toPDUType _ = UNKNOWN_PDU
+
+instance StructType PDUTypes where
+  toStructType 1 = A_ASSOCIATE_RQ
+  toStructType 2 = A_ASSOCIATE_AC
+  toStructType 3 = A_ASSOCIATE_RJ
+  toStructType 4 = P_DATA_TF
+  toStructType 5 = A_RELEASE_RQ
+  toStructType 6 = A_RELEASE_RP
+  toStructType 7 = A_ABORT
+  toStructType 0 = UNKNOWN_PDU
+  toStructType _ = UNKNOWN_PDU
   
-  fromPDUType UNKNOWN_PDU    = 0
-  fromPDUType A_ASSOCIATE_RQ = 1
-  fromPDUType A_ASSOCIATE_AC = 2
-  fromPDUType A_ASSOCIATE_RJ = 3
-  fromPDUType P_DATA_TF      = 4
-  fromPDUType A_RELEASE_RQ   = 5
-  fromPDUType A_RELEASE_RP   = 6
-  fromPDUType A_ABORT        = 7
+  fromStructType UNKNOWN_PDU    = 0
+  fromStructType A_ASSOCIATE_RQ = 1
+  fromStructType A_ASSOCIATE_AC = 2
+  fromStructType A_ASSOCIATE_RJ = 3
+  fromStructType P_DATA_TF      = 4
+  fromStructType A_RELEASE_RQ   = 5
+  fromStructType A_RELEASE_RP   = 6
+  fromStructType A_ABORT        = 7
   
   
-data PDUHeader =PDUHeader{ pduType::Word8, pduHeaderReserved::Word8, pduLength::Word32} deriving (Show,Generic,Eq)
+data PDUHeader =PDUHeader{ pduType::PDUTypes, pduHeaderReserved::Word8, pduLength::Word32} deriving (Show,Generic,Eq)
 
 instance Binary PDUHeader
 
 newAssociateRQPDU::AssociateRQPDU
 newAssociateRQPDU = AssociateRQPDU {
-    arqPDUHeader       = PDUHeader (getPDUTypeVal A_ASSOCIATE_RQ) 0 0
+    arqPDUHeader       = PDUHeader A_ASSOCIATE_RQ 0 0
   , arqReserved        = 0
   , arqProtocolVersion = 0
   , calledAETitle      = ""
@@ -115,6 +123,7 @@ instance Binary AssociateRQPDU where
            calledaetitle  <- replicateM 16 get
            callingaetitle <- replicateM 16 get
            arqreserved2   <- get
+--TODO add unpack of arqitem list           
            return $ AssociateRQPDU arqHeader arqprotocolv arqreserved calledaetitle callingaetitle arqreserved2 []
 
 
@@ -131,7 +140,7 @@ type PDUTypeVal = Int
 
 buildAssociateRQPDU::CalledAETitle ->CallingAETitle ->AssociateRQPDU
 buildAssociateRQPDU toAE fromAE=
-  AssociateRQPDU (PDUHeader (getPDUTypeVal A_ASSOCIATE_RQ) 0 0)
+  AssociateRQPDU (PDUHeader A_ASSOCIATE_RQ 0 0)
                    0
                    0
                    toAE
@@ -153,7 +162,7 @@ instance PDU AssociateACPDU where
   packPDU pdu = encode $ pdu { accPDUHeader = (accPDUHeader pdu)
                               {pduLength = calPDULength pdu}}
 buildAssociateACPDU::AssociateACPDU
-buildAssociateACPDU = AssociateACPDU (PDUHeader (getPDUTypeVal A_ASSOCIATE_AC) 0 0)
+buildAssociateACPDU = AssociateACPDU (PDUHeader A_ASSOCIATE_AC 0 0)
                                      0
                                      (BL.replicate 66 0)
                                      [[]]
@@ -172,7 +181,7 @@ instance PDU AssociateRelRQPDU where
 
 
 buildAssociateRelRQ::AssociateRelRQPDU
-buildAssociateRelRQ = AssociateRelRQPDU (PDUHeader (getPDUTypeVal A_RELEASE_RQ) 0 0) 0
+buildAssociateRelRQ = AssociateRelRQPDU (PDUHeader A_RELEASE_RQ 0 0) 0
 
 data AssociateRelRPPDU = AssociateRelRPPDU {
     arrpPDUHeader :: PDUHeader
@@ -188,7 +197,7 @@ instance PDU AssociateRelRPPDU where
 
 
 buildAssociateRelRP::AssociateRelRPPDU
-buildAssociateRelRP = AssociateRelRPPDU (PDUHeader (getPDUTypeVal A_RELEASE_RP) 0 0) 0
+buildAssociateRelRP = AssociateRelRPPDU (PDUHeader A_RELEASE_RP 0 0) 0
 
 
 {-
@@ -202,29 +211,29 @@ buildAssociateRelRP = AssociateRelRPPDU (PDUHeader (getPDUTypeVal A_RELEASE_RP) 
 
 
 data AbortSource = AbortServiceProvider|AbortServiceUser|InvalidAbortSource
-instance Enum AbortSource where
-  fromEnum AbortServiceProvider = 2
-  fromEnum AbortServiceUser     = 0
-  fromEnum InvalidAbortSource   = 255
+instance StructType AbortSource where
+  fromStructType AbortServiceProvider = 2
+  fromStructType AbortServiceUser     = 0
+  fromStructType InvalidAbortSource   = 255
 
-  toEnum 2 = AbortServiceProvider
-  toEnum 0 = AbortServiceUser
-  toEnum _ = InvalidAbortSource 
+  toStructType 2 = AbortServiceProvider
+  toStructType 0 = AbortServiceUser
+  toStructType _ = InvalidAbortSource 
 
 data AbortReason = AbortUnspecified | UnexpectedPDU | UnrecogPDUParam | UnexpectedPDUParam|InvalidPDUParamVal 
-instance Enum AbortReason where
-  fromEnum AbortUnspecified   = 0
-  fromEnum UnexpectedPDU      = 2
-  fromEnum UnrecogPDUParam    = 4
-  fromEnum UnexpectedPDUParam = 5
-  fromEnum InvalidPDUParamVal = 6
+instance StructType AbortReason where
+  fromStructType AbortUnspecified   = 0
+  fromStructType UnexpectedPDU      = 2
+  fromStructType UnrecogPDUParam    = 4
+  fromStructType UnexpectedPDUParam = 5
+  fromStructType InvalidPDUParamVal = 6
 
-  toEnum 0 = AbortUnspecified
-  toEnum 2 = UnexpectedPDU
-  toEnum 4 = UnrecogPDUParam
-  toEnum 5 = UnexpectedPDUParam
-  toEnum 6 = InvalidPDUParamVal
-  toEnum _ = AbortUnspecified  
+  toStructType 0 = AbortUnspecified
+  toStructType 2 = UnexpectedPDU
+  toStructType 4 = UnrecogPDUParam
+  toStructType 5 = UnexpectedPDUParam
+  toStructType 6 = InvalidPDUParamVal
+  toStructType _ = AbortUnspecified  
 
 data AbortPDU = AbortPDU {
     abortHeader    ::PDUHeader
@@ -241,10 +250,10 @@ instance PDU AbortPDU where
  
 
 buildAbortPDU::AbortSource -> AbortReason -> AbortPDU
-buildAbortPDU s r = AbortPDU (PDUHeader (getPDUTypeVal A_ABORT) 0 4)
+buildAbortPDU s r = AbortPDU (PDUHeader A_ABORT 0 4)
                              0
-                             (fromIntegral $ fromEnum r)
-                             (fromIntegral $ fromEnum s)
+                             (fromStructType r)
+                             (fromStructType s)
 
 
 {-
@@ -318,15 +327,35 @@ isPDVCommand pdv = msgCtrlHeader pdv .&. 1 >  0
 isPDVLastFragment :: PresentationDataValueItem -> Bool
 isPDVLastFragment pdv = msgCtrlHeader pdv .&. 2 > 0 
 
+data ARQItemType = ApplicationContextItemT | UserInformationItemT | PresentationContextItemRQT|PresentationContextItemACT|UnknownARQItemT deriving (Show,Eq)
+
+instance Binary ARQItemType  where
+  put a = put (fromStructType a)
+  get = do t <- get
+           return $ toStructType t
+           
+instance StructType ARQItemType where
+  fromStructType ApplicationContextItemT    = 0x10
+  fromStructType UserInformationItemT       = 0x50
+  fromStructType PresentationContextItemRQT = 0x20
+  fromStructType PresentationContextItemACT = 0x21
+  fromStructType _                          = 0
+
+  toStructType 0x10 = ApplicationContextItemT
+  toStructType 0x50 = UserInformationItemT
+  toStructType 0x20 = PresentationContextItemRQT
+  toStructType 0x21 = PresentationContextItemACT
+  toStructType _    = UnknownARQItemT
+  
 data ARQItemHeader = ARQItemHeader
                      {
-                        arqItemType       ::Word8
+                        arqItemType       ::ARQItemType
                      ,  arqItemReserved   ::Word8
                      ,  arqItemLength     ::Word16
                      } deriving (Show, Eq, Generic)
 instance Binary ARQItemHeader
 
-class ARQItemType a where
+class ARQItemT a where
   getARQHeader::a -> ARQItemHeader
 
 data ARQItem = ApplicationContextItem
@@ -337,7 +366,7 @@ data ARQItem = ApplicationContextItem
              | UserInformationItem
                {
                  uiiHeader      ::ARQItemHeader
-               , uiiSubItemList ::[Word8]
+               , uiiSubItemList ::[UserInformationSubItem]
                }
              | PresentationContextItem
                {
@@ -346,16 +375,16 @@ data ARQItem = ApplicationContextItem
                , pcReserved1         ::Word8
                , pcReserved2         ::Word8
                , pcReserved3         ::Word8
-               , pcItemList          ::[Word8]
+               , pcItemList          ::[PresentationContextSubItem]
                }
              | UnknownARQItem        
              deriving (Show,Generic,Eq)
 
-instance ARQItemType ARQItem where
-  getARQHeader ApplicationContextItem{..} = acnHeader 
-  getARQHeader UserInformationItem{..}    = uiiHeader
-  getARQHeader PresentationContextItem{..}    = pcHeader
-  getARQHeader UnknownARQItem             = ARQItemHeader 0 0 0
+instance ARQItemT ARQItem where
+  getARQHeader ApplicationContextItem{..}  = acnHeader 
+  getARQHeader UserInformationItem{..}     = uiiHeader
+  getARQHeader PresentationContextItem{..} = pcHeader
+  getARQHeader UnknownARQItem              = ARQItemHeader (toStructType 0) 0 0
   
 instance Binary ARQItem where
   put i = case i of
@@ -376,25 +405,24 @@ instance Binary ARQItem where
                
                
   get = do arqItemHeader <- get
---           return $ ApplicationContextItem (ARQItemHeader 0x10 0 20) "name"
            case arqItemType arqItemHeader of
-             0x10 -> do  
-                        acName   <- replicateM (fromIntegral (arqItemLength arqItemHeader)) get
-                        return $ ApplicationContextItem arqItemHeader acName                       
-             0x20 -> populatePresentationContext arqItemHeader
-             0x21 -> populatePresentationContext arqItemHeader
-             0x50 -> do 
-                        usrItemList <- replicateM (fromIntegral (arqItemLength arqItemHeader)) get
-                        return $ UserInformationItem arqItemHeader usrItemList
-             _    -> return UnknownARQItem
+             ApplicationContextItemT    -> do  
+                                            acName   <- replicateM (fromIntegral (arqItemLength arqItemHeader)) get
+                                            return $ ApplicationContextItem arqItemHeader acName                       
+             PresentationContextItemRQT -> populatePresentationContext arqItemHeader
+             PresentationContextItemACT -> populatePresentationContext arqItemHeader
+             UserInformationItemT       -> do 
+                                            usrItemList <- replicateM (fromIntegral (arqItemLength arqItemHeader)) get
+                                            return $ UserInformationItem arqItemHeader usrItemList
+             _                          -> return UnknownARQItem
         where populatePresentationContext header  =
                 do 
                    pcidentifier <- get
                    pcreserved1  <- get
                    pcreserved2  <- get
                    pcreserved3  <- get
-                   pcitemlist   <- replicateM (fromIntegral (arqItemLength header)-4) get
-                   return $ PresentationContextItem header pcidentifier pcreserved1 pcreserved2 pcreserved3 pcitemlist
+                   pcitemlist   <- replicateM (fromIntegral (arqItemLength header)-4) get -- subtract 4 for the identifier and reserved fields
+                   return $ PresentationContextItem header pcidentifier pcreserved1 pcreserved2 pcreserved3 (unpackPCSubItemList (BL.pack pcitemlist))
 
 
 unpackARQItemList::BL.ByteString -> [ARQItem]
@@ -410,54 +438,96 @@ Need to add the size of the ARQ header
 arqPackedItemLength::ARQItem -> Int64
 arqPackedItemLength item = fromIntegral $ arqItemLength (getARQHeader item) + 4 
 
-data PCItem = AbstractSyntax{
-                 asItemType    ::Word8
-               , asReserved    ::Word8
-               , asItemLength  ::Word16
-               , asName        ::String}
-              | TransferSyntax{
-                   tsItemType ::Word8
-                 , tsReserved ::Word8
-                 , tsLength   ::Word16
-                 , tsName    ::String}
-              | UnknownPCItem
-              deriving (Show,Generic)
+data SubItemTypes = AbstractSyntaxT | TransferSyntaxT|ImplementationClassUIDT | ImplementationVersionNameT
+                                     | MaximumLengthReceivedT | UnknownSubItemT deriving (Show, Eq)
+instance Binary SubItemTypes where
+  put a = put (fromStructType a)
+  get = do t <- get
+           return $ toStructType t
+           
+instance StructType SubItemTypes where
+  fromStructType AbstractSyntaxT            = 0x30
+  fromStructType TransferSyntaxT            = 0x40
+  fromStructType ImplementationClassUIDT    = 0x52
+  fromStructType ImplementationVersionNameT = 0x55
+  fromStructType MaximumLengthReceivedT     = 0x51
+  fromStructType _                          = 0
+
+  toStructType 0x30 = AbstractSyntaxT
+  toStructType 0x40 = TransferSyntaxT
+  toStructType 0x52 = ImplementationClassUIDT
+  toStructType 0x55 = ImplementationVersionNameT
+  toStructType 0x51 = MaximumLengthReceivedT
+  toStructType _    = UnknownSubItemT
+  
+  
+
+data SubItemHeader = SubItemHeader { itemType::SubItemTypes, itemReserved::Word8, itemLength::Word16}
+  deriving (Show,Generic,Eq)
+
+instance Binary SubItemHeader
+
+unpackPCSubItemList::BL.ByteString -> [PresentationContextSubItem]
+unpackPCSubItemList bl
+     | BL.null bl = []
+     | otherwise  = let item = decode bl
+                    in item:unpackPCSubItemList (BL.drop (pcSubItemPackedLength item) bl )
                        
-instance Binary PCItem where
+pcSubItemPackedLength::PresentationContextSubItem -> Int64
+pcSubItemPackedLength item = fromIntegral $ itemLength (getSubItemHeader item) + 4 -- add the size of sub item header to get total length
+
+class SubItemType a where
+  getSubItemHeader::a-> SubItemHeader
+
+data PresentationContextSubItem =
+                AbstractSyntax{
+                   asItemHeader  ::SubItemHeader
+                 , asName        ::String}
+              | TransferSyntax{
+                   tsItemHeader ::SubItemHeader
+                 , tsName       ::String}
+              | UnknownPCItem
+              deriving (Show,Generic,Eq)
+
+instance SubItemType PresentationContextSubItem where
+  getSubItemHeader AbstractSyntax{..} = asItemHeader
+  getSubItemHeader TransferSyntax{..} = tsItemHeader
+  getSubItemHeader UnknownPCItem = SubItemHeader UnknownSubItemT 0 0
+
+  
+instance Binary PresentationContextSubItem where
   put i = case i of
-            AbstractSyntax {..} -> do put asItemType
-                                      put asReserved
-                                      put asItemLength
+            AbstractSyntax {..} -> do put asItemHeader
                                       mapM_ put asName
                                
-            TransferSyntax {..} -> do put tsItemType
-                                      put tsReserved
-                                      put tsLength
+            TransferSyntax {..} -> do put tsItemHeader
                                       mapM_ put tsName
             UnknownPCItem       -> putWord8 0
   get = do
-    itemType <- get
-    case itemType of
-      0x40 -> do tsreserved   <- get
-                 tsitemlength <- get
-                 tsname       <- replicateM (fromIntegral tsitemlength) get
-                 return $ TransferSyntax itemType tsreserved tsitemlength tsname
-      0x30 -> do asreserved   <- get
-                 asitemlength <- get
-                 asname       <- replicateM (fromIntegral asitemlength) get
-                 return $ AbstractSyntax itemType asreserved asitemlength asname 
+    itemHeader <- get
+    case itemType itemHeader of
+      TransferSyntaxT -> do 
+                 tsname       <- replicateM (fromIntegral $ itemLength itemHeader) get
+                 return $ TransferSyntax itemHeader tsname
+      AbstractSyntaxT -> do 
+                 asname       <- replicateM (fromIntegral $ itemLength itemHeader) get
+                 return $ AbstractSyntax itemHeader asname 
       _    -> return UnknownPCItem
-data ItemHeader = ItemHeader { itemType::Word8, itemReserved::Word8, itemLength::Word16}
-  deriving (Show,Generic)
-instance Binary ItemHeader
-data UserInformationSubItem = ImplementationClassUID        {   icItemHeader ::ItemHeader
+
+data UserInformationSubItem = ImplementationClassUID        {   icItemHeader ::SubItemHeader
                                                               , icUID        ::String}
-                            | ImplementationVersionName     {   ivnItemHeader::ItemHeader
+                            | ImplementationVersionName     {   ivnItemHeader::SubItemHeader
                                                               , ivn          ::String}
-                            | MaximumLengthReceived         {   mlItemHeader ::ItemHeader
+                            | MaximumLengthReceived         {   mlItemHeader ::SubItemHeader
                                                               , mlMaxLength  ::Word32}
                             | UnknownSubItem
-                                                            deriving (Show,Generic)
+                                                            deriving (Show,Generic, Eq)
+instance SubItemType UserInformationSubItem where
+  getSubItemHeader ImplementationClassUID {..}    = icItemHeader
+  getSubItemHeader ImplementationVersionName {..} = ivnItemHeader
+  getSubItemHeader MaximumLengthReceived{..}      = mlItemHeader
+  getSubItemHeader UnknownSubItem                 = SubItemHeader UnknownSubItemT 0 0
+  
 instance Binary UserInformationSubItem where
   put i = case i of
             ImplementationClassUID{..}    -> do put icItemHeader
@@ -471,13 +541,13 @@ instance Binary UserInformationSubItem where
   get = do           
           header <- get
           case itemType header of
-            0x51 -> do
+            MaximumLengthReceivedT -> do
                       mlmaxlength <- get
                       return $ MaximumLengthReceived header mlmaxlength
-            0x52 -> do
+            ImplementationClassUIDT -> do
                       icUID <- replicateM (fromIntegral $ itemLength header) get
                       return $ ImplementationClassUID header icUID
-            0x55 -> do
+            ImplementationVersionNameT -> do
                       ivn <- replicateM (fromIntegral $ itemLength header) get
                       return $ ImplementationVersionName header ivn
             _    -> return UnknownSubItem          
