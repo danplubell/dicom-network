@@ -43,3 +43,17 @@ instance Binary PD where
 packPDVIList::BS.ByteString
 packPDVIList = BS.concat [packPDVI buildPDVI, packPDVI buildPDVI2]
 
+buildPresentationContextItem::ARQItemType -> ARQItem
+buildPresentationContextItem t = PresentationContextItem {pcHeader= ARQItemHeader t 0 12
+                                                            , pcIdentifier = 11
+                                                            , pcReserved1  = 0
+                                                            , pcReserved2  = 0
+                                                            , pcReserved3  = 0
+                                                            , pcItemList   = [AbstractSyntax (SubItemHeader TransferSyntaxT 0 4) "0123"]
+                                                         }
+
+buildUserInformationItem::ARQItem
+buildUserInformationItem = UserInformationItem { uiiHeader = ARQItemHeader UserInformationItemT 0 8
+                                                 , uiiSubItemList = [MaximumLengthReceived (SubItemHeader MaximumLengthReceivedT 0 4) 32]
+                                                }
+                             

@@ -6,21 +6,21 @@ import Data.Binary
 import qualified Data.ByteString.Lazy as BL
 
 buildApplicationContextItem::ARQItem
-buildApplicationContextItem = ApplicationContextItem {   acnHeader = ARQItemHeader 0x10 0 20 
+buildApplicationContextItem = ApplicationContextItem {   acnHeader = ARQItemHeader ApplicationContextItemT 0 20 
                                                        , acnContextName = "12345678901234567890"
                                                      }
-buildPresentationContextItem::Word8 -> ARQItem
-buildPresentationContextItem t = PresentationContextItem {pcHeader= ARQItemHeader t 0 10
+buildPresentationContextItem::ARQItemType -> ARQItem
+buildPresentationContextItem t = PresentationContextItem {pcHeader= ARQItemHeader t 0 12
                                                         , pcIdentifier = 11
                                                         , pcReserved1  = 0
                                                         , pcReserved2  = 0
                                                         , pcReserved3  = 0
-                                                        , pcItemList   = [1,2,3,4,5,6]
+                                                        , pcItemList   = [AbstractSyntax (SubItemHeader AbstractSyntaxT 0 4) "0123"]
                                                         }
 
 buildUserInformationItem::ARQItem
-buildUserInformationItem = UserInformationItem { uiiHeader = ARQItemHeader 0x50 0 10
-                                                 , uiiSubItemList = [0,1,2,3,4,5,6,7,8,9]
+buildUserInformationItem = UserInformationItem { uiiHeader = ARQItemHeader UserInformationItemT 0 8
+                                                 , uiiSubItemList = [MaximumLengthReceived (SubItemHeader MaximumLengthReceivedT 0 4) 32]
                                                }
 spec::Spec
 spec = do describe "Test binary decode/encode of ARQItems " $ do
@@ -29,11 +29,11 @@ spec = do describe "Test binary decode/encode of ARQItems " $ do
                    itemBL = encode item
                 in decode itemBL `shouldBe` item
             it "PresentationContextItem RQ" $ 
-               let item = buildPresentationContextItem 0x20
+               let item = buildPresentationContextItem PresentationContextItemRQT
                    itemBL =  encode item
                 in decode itemBL `shouldBe` item
             it "PresentationContextItem AC" $ 
-               let item = buildPresentationContextItem 0x21
+               let item = buildPresentationContextItem PresentationContextItemACT
                    itemBL =  encode item
                 in decode itemBL `shouldBe` item
             it "UserInformationItem" $
@@ -46,7 +46,7 @@ spec = do describe "Test binary decode/encode of ARQItems " $ do
                     itemBL = encode item
                 in unpackARQItemList itemBL `shouldBe` [item]
              it "Unpack Presentation Context" $ 
-                let item = buildPresentationContextItem 0x20
+                let item = buildPresentationContextItem PresentationContextItemRQT
                     itemBL = encode item
                 in unpackARQItemList itemBL `shouldBe` [item]
              it "Unpack User Information Item" $
@@ -55,7 +55,7 @@ spec = do describe "Test binary decode/encode of ARQItems " $ do
                 in unpackARQItemList itemBL `shouldBe` [item]
              it "Unpack multiple" $
                 let item1 = buildUserInformationItem
-                    item2 = buildPresentationContextItem 0x20
+                    item2 = buildPresentationContextItem PresentationContextItemRQT
                     item3 = buildApplicationContextItem
                     itemBL = BL.concat [encode item1, encode item2, encode item3]
                     allItems = [item1, item2, item3]

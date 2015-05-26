@@ -413,7 +413,7 @@ instance Binary ARQItem where
              PresentationContextItemACT -> populatePresentationContext arqItemHeader
              UserInformationItemT       -> do 
                                             usrItemList <- replicateM (fromIntegral (arqItemLength arqItemHeader)) get
-                                            return $ UserInformationItem arqItemHeader usrItemList
+                                            return $ UserInformationItem arqItemHeader (unpackUserSubItemList (BL.pack usrItemList))
              _                          -> return UnknownARQItem
         where populatePresentationContext header  =
                 do 
@@ -475,6 +475,16 @@ unpackPCSubItemList bl
                        
 pcSubItemPackedLength::PresentationContextSubItem -> Int64
 pcSubItemPackedLength item = fromIntegral $ itemLength (getSubItemHeader item) + 4 -- add the size of sub item header to get total length
+
+unpackUserSubItemList::BL.ByteString -> [UserInformationSubItem]
+unpackUserSubItemList bl
+   | BL.null bl = []
+   | otherwise  = let item = decode bl
+                  in item:unpackUserSubItemList (BL.drop (userSubItemPackedLength item) bl)
+                     
+userSubItemPackedLength::UserInformationSubItem -> Int64
+userSubItemPackedLength item = fromIntegral $ itemLength (getSubItemHeader item) + 4
+
 
 class SubItemType a where
   getSubItemHeader::a-> SubItemHeader

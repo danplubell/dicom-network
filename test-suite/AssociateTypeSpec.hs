@@ -6,7 +6,7 @@ import qualified Data.ByteString.Lazy as BL
 
 buildTestAssociateRQ::AssociateRQPDU
 buildTestAssociateRQ = AssociateRQPDU{
-    arqPDUHeader          = PDUHeader (getPDUTypeVal A_ASSOCIATE_RQ) 0 0
+    arqPDUHeader          = PDUHeader A_ASSOCIATE_RQ 0 0
   , arqReserved        = 0
   , arqProtocolVersion = 0
   , calledAETitle      = "CALLEDAETITLE   "
@@ -16,8 +16,9 @@ buildTestAssociateRQ = AssociateRQPDU{
 
 buildARQItem::ARQItem
 buildARQItem = ApplicationContextItem {
-    acnHeader = ARQItemHeader 0x50 0 4
+    acnHeader = ARQItemHeader ApplicationContextItemT 0 4
   , acnContextName = "abcd"}
+               
 spec::Spec
 spec = describe "Test Associate Types" $ 
            it "AssociateRQ Type" $ do
