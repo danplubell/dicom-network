@@ -57,3 +57,16 @@ buildUserInformationItem = UserInformationItem { uiiHeader = ARQItemHeader UserI
                                                  , uiiSubItemList = [MaximumLengthReceived (SubItemHeader MaximumLengthReceivedT 0 4) 32]
                                                 }
                              
+buildTestAssociateRQ::AssociateRQPDU
+buildTestAssociateRQ = AssociateRQPDU {
+   arqPDUHeader = PDUHeader A_ASSOCIATE_RQ 0 76
+  , arqReserved = 0
+  , arqProtocolVersion = 0
+  , calledAETitle  = "CALLEDAETITLE   "
+  , callingAETitle = "CALLINGAETITLE  "
+  , arqVariableItems = [ApplicationContextItem {
+                                                acnHeader = ARQItemHeader ApplicationContextItemT 0 4
+                                              , acnContextName = "abcd"
+                                              }]
+  , arqReserved2 = replicate 32 0 }
+                       

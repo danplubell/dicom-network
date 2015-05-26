@@ -54,7 +54,7 @@ getPDUType  bs = if BL.null bs then UNKNOWN_PDU
                    else toStructType (head $ BL.unpack bs)
 
 calPDULength :: (Binary a, Num b) => a -> b
-calPDULength pdu = fromIntegral $ BL.length (encode pdu)-6 
+calPDULength pdu = fromIntegral $ BL.length (encode pdu)-4 
 
 data PDUTypes = A_ASSOCIATE_RQ|A_ASSOCIATE_AC|A_ASSOCIATE_RJ|P_DATA_TF|A_RELEASE_RQ|A_RELEASE_RP|A_ABORT|UNKNOWN_PDU deriving (Show,Eq,Ord)
 instance Binary PDUTypes where
@@ -84,7 +84,7 @@ instance StructType PDUTypes where
   fromStructType A_ABORT        = 7
   
   
-data PDUHeader =PDUHeader{ pduType::PDUTypes, pduHeaderReserved::Word8, pduLength::Word32} deriving (Show,Generic,Eq)
+data PDUHeader =PDUHeader{ pduType::PDUTypes, pduHeaderReserved::Word8, pduLength::Word16} deriving (Show,Generic,Eq)
 
 instance Binary PDUHeader
 
@@ -93,10 +93,10 @@ newAssociateRQPDU = AssociateRQPDU {
     arqPDUHeader       = PDUHeader A_ASSOCIATE_RQ 0 0
   , arqReserved        = 0
   , arqProtocolVersion = 0
-  , calledAETitle      = ""
-  , callingAETitle     = ""
+  , calledAETitle      = replicate 16 ' '
+  , callingAETitle     = replicate 16 ' '
   , arqVariableItems   = []                 
-  , arqReserved2       = BL.replicate 32 0}
+  , arqReserved2       = replicate 32 0}
 
 data AssociateRQPDU = AssociateRQPDU {
     arqPDUHeader       :: PDUHeader
@@ -104,7 +104,7 @@ data AssociateRQPDU = AssociateRQPDU {
   , arqReserved        :: Word16
   , calledAETitle      :: String
   , callingAETitle     :: String
-  , arqReserved2       :: BL.ByteString -- fixed length of 32 reserved bytes
+  , arqReserved2       :: [Word8] -- fixed length of 32 reserved bytes
   , arqVariableItems   :: [ARQItem] --includes Application Context Item, User Information Item, and Presentation Context.  These items can be in any order.  
   } deriving (Show,Generic,Eq)
 
@@ -115,16 +115,17 @@ instance Binary AssociateRQPDU where
              put (arqReserved a)
              mapM_ put (take 16 $ calledAETitle a)
              mapM_ put (take 16 $ callingAETitle a)
-             put (arqReserved2 a)
+             mapM_ put (arqReserved2 a)
              mapM_ put (arqVariableItems a)
   get = do arqHeader      <- get
            arqprotocolv   <- get
            arqreserved    <- get
            calledaetitle  <- replicateM 16 get
            callingaetitle <- replicateM 16 get
-           arqreserved2   <- get
---TODO add unpack of arqitem list           
-           return $ AssociateRQPDU arqHeader arqprotocolv arqreserved calledaetitle callingaetitle arqreserved2 []
+           arqreserved2   <- replicateM 32 get
+           arqItemBytes   <- replicateM (fromIntegral (pduLength arqHeader)-68) get            
+           return $ AssociateRQPDU arqHeader arqprotocolv arqreserved calledaetitle callingaetitle arqreserved2
+                                   (unpackARQItemList (BL.pack arqItemBytes))
 
 
 
@@ -145,7 +146,7 @@ buildAssociateRQPDU toAE fromAE=
                    0
                    toAE
                    fromAE
-                   (BL.replicate 32 0)
+                   (replicate 32 0)
                    []
     
 data AssociateACPDU = AssociateACPDU {
