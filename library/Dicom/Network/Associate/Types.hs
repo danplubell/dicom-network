@@ -54,7 +54,7 @@ getPDUType  bs = if BL.null bs then UNKNOWN_PDU
                    else toStructType (head $ BL.unpack bs)
 
 calPDULength :: (Binary a, Num b) => a -> b
-calPDULength pdu = fromIntegral $ BL.length (encode pdu)-4 
+calPDULength pdu = fromIntegral $ BL.length (encode pdu)-6 
 
 data PDUTypes = A_ASSOCIATE_RQ|A_ASSOCIATE_AC|A_ASSOCIATE_RJ|P_DATA_TF|A_RELEASE_RQ|A_RELEASE_RP|A_ABORT|UNKNOWN_PDU deriving (Show,Eq,Ord)
 instance Binary PDUTypes where
@@ -84,7 +84,7 @@ instance StructType PDUTypes where
   fromStructType A_ABORT        = 7
   
   
-data PDUHeader =PDUHeader{ pduType::PDUTypes, pduHeaderReserved::Word8, pduLength::Word16} deriving (Show,Generic,Eq)
+data PDUHeader =PDUHeader{ pduType::PDUTypes, pduHeaderReserved::Word8, pduLength::Word32} deriving (Show,Generic,Eq)
 
 instance Binary PDUHeader
 

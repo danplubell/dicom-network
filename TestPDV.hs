@@ -59,7 +59,7 @@ buildUserInformationItem = UserInformationItem { uiiHeader = ARQItemHeader UserI
                              
 buildTestAssociateRQ::AssociateRQPDU
 buildTestAssociateRQ = AssociateRQPDU {
-   arqPDUHeader = PDUHeader A_ASSOCIATE_RQ 0 76
+   arqPDUHeader = PDUHeader A_ASSOCIATE_RQ 0 82
   , arqReserved = 0
   , arqProtocolVersion = 0
   , calledAETitle  = "CALLEDAETITLE   "
