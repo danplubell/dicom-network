@@ -563,3 +563,12 @@ instance Binary UserInformationSubItem where
                       return $ ImplementationVersionName header ivn
             _    -> return UnknownSubItem          
             
+
+{-
+Replace a value at a position in a bytestring. 
+-}
+replaceValueAt::(Binary a) => Int64 -> a -> BL.ByteString -> BL.ByteString
+replaceValueAt p v s = let t = BL.splitAt p s
+                       in splice (fst t) ( encode v) (snd t)
+                       where splice b c d = BL.concat [ b , c , BL.drop (BL.length c) d]
+                             
